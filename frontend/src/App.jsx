@@ -22,6 +22,8 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authError, setAuthError] = useState('');
   const [pinField, setPinField] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.authStatus().then((s) => {
@@ -34,54 +36,79 @@ export default function App() {
   async function handleSetup(e) {
     e.preventDefault();
     setAuthError('');
+    setSubmitting(true);
     try {
       const { token } = await api.setup(pinField);
       setToken(token);
       setHasPin(true);
       setLoggedIn(true);
     } catch (err) { setAuthError(err.message); }
+    finally { setSubmitting(false); }
   }
   async function handleLogin(e) {
     e.preventDefault();
     setAuthError('');
+    setSubmitting(true);
     try {
       const { token } = await api.login(pinField);
       setToken(token);
       setLoggedIn(true);
     } catch (err) { setAuthError(err.message); }
+    finally { setSubmitting(false); }
   }
   function handleLogout() {
     clearToken();
     setLoggedIn(false);
   }
 
-  if (!authChecked) return <div className="lock-overlay" style={{ display: 'flex' }}><div className="glyph">字迹</div></div>;
-
-  if (!hasPin) {
+  if (!authChecked) {
     return (
-      <div className="lock-overlay" style={{ display: 'flex' }}>
-        <form className="lock-card" onSubmit={handleSetup}>
+      <div className="lock-overlay">
+        <div className="lock-loading">
           <div className="glyph">字迹</div>
-          <p>This app is reachable at a public URL — create a PIN before you start.</p>
-          <input type="password" inputMode="numeric" maxLength={12} placeholder="Choose a PIN (4+ chars)"
-            value={pinField} onChange={(e) => setPinField(e.target.value)} autoFocus />
-          {authError && <p id="lockError" style={{ display: 'block' }}>{authError}</p>}
-          <button className="btn" style={{ width: '100%' }} type="submit">Create PIN & start</button>
-        </form>
+        </div>
       </div>
     );
   }
 
-  if (!loggedIn) {
+  if (!hasPin || !loggedIn) {
+    const isSetup = !hasPin;
     return (
-      <div className="lock-overlay" style={{ display: 'flex' }}>
-        <form className="lock-card" onSubmit={handleLogin}>
-          <div className="glyph">字迹</div>
-          <p>Enter your PIN to open your tracker</p>
-          <input type="password" inputMode="numeric" maxLength={12} placeholder="••••"
-            value={pinField} onChange={(e) => setPinField(e.target.value)} autoFocus />
-          {authError && <p id="lockError" style={{ display: 'block' }}>{authError}</p>}
-          <button className="btn" style={{ width: '100%' }} type="submit">Unlock</button>
+      <div className="lock-overlay">
+        <form className="lock-card" onSubmit={isSetup ? handleSetup : handleLogin}>
+          <div className="lock-glyph-badge">字</div>
+          <h1 className="lock-title">{isSetup ? 'Set up your tracker' : '字迹'}</h1>
+          <p className="lock-sub">
+            {isSetup
+              ? 'This app lives at a public URL — create a PIN before you start.'
+              : 'Enter your PIN to open your tracker'}
+          </p>
+
+          <div className={'pin-field' + (authError ? ' has-error' : '')}>
+            <input
+              type={showPin ? 'text' : 'password'}
+              inputMode="text"
+              maxLength={12}
+              placeholder={isSetup ? 'Choose a PIN (4+ characters)' : 'Enter PIN'}
+              value={pinField}
+              onChange={(e) => { setPinField(e.target.value); setAuthError(''); }}
+              autoFocus
+              autoComplete="off"
+            />
+            <button type="button" className="pin-toggle" onClick={() => setShowPin(!showPin)} tabIndex={-1}>
+              {showPin ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          {authError && (
+            <div className="lock-error">
+              <span className="lock-error-dot" />{authError}
+            </div>
+          )}
+
+          <button className="btn btn-block" type="submit" disabled={submitting || pinField.length < 1}>
+            {submitting ? 'Please wait…' : (isSetup ? 'Create PIN & start' : 'Unlock')}
+          </button>
         </form>
       </div>
     );
@@ -94,6 +121,16 @@ function MainApp({ onLogout }) {
   const [tab, setTab] = useState('today');
   const [dayCount, setDayCount] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const NAV_ITEMS = [
+    ['today', '今', 'Today'], ['vocab', '词', 'Vocab'], ['practice', '改', 'Practice'],
+    ['cards', '卡', 'Cards'], ['calendar', '历', 'Calendar'],
+    ['library', '库', 'Library'], ['roadmap', '程', 'Roadmap'], ['stats', '统', 'Stats'],
+  ];
+  const MOBILE_PRIMARY = ['today', 'vocab', 'practice', 'cards'];
+  const mobilePrimaryItems = NAV_ITEMS.filter(([key]) => MOBILE_PRIMARY.includes(key));
+  const mobileMoreItems = NAV_ITEMS.filter(([key]) => !MOBILE_PRIMARY.includes(key));
 
   const refreshSidebar = useCallback(async () => {
     let sd = (await api.getStartDate()).startDate;
@@ -112,12 +149,21 @@ function MainApp({ onLogout }) {
 
   useEffect(() => { refreshSidebar(); }, [refreshSidebar]);
 
+  function goTo(key) {
+    setTab(key);
+    setMoreOpen(false);
+  }
+
+  const activeInMore = mobileMoreItems.some(([key]) => key === tab);
+
   return (
     <div className="app">
       <div className="mobile-topbar">
         <span className="glyph">字迹</span>
         <span className="info">Day {dayCount}/180 · streak {streak}</span>
       </div>
+
+      {/* Desktop sidebar — full nav, always visible on wide screens */}
       <div className="sidebar">
         <div className="brand">
           <div className="glyph">字迹</div>
@@ -128,13 +174,8 @@ function MainApp({ onLogout }) {
           <div className="thread-track"><div className="thread-fill" style={{ width: (dayCount / 180 * 100) + '%' }} /></div>
         </div>
         <nav>
-          {[
-            ['today', '今', 'Today'], ['vocab', '词', 'Vocab'], ['practice', '改', 'Practice'],
-            ['cards', '卡', 'Cards'], ['calendar', '历', 'Calendar'],
-            ['library', '库', 'Library'], ['roadmap', '程', 'Roadmap'], ['stats', '统', 'Stats'],
-          ].map(([key, glyph, label]) => (
-
-            <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
+          {NAV_ITEMS.map(([key, glyph, label]) => (
+            <button key={key} className={tab === key ? 'active' : ''} onClick={() => goTo(key)}>
               <span className="tag">{glyph}</span> {label}
             </button>
           ))}
@@ -144,13 +185,45 @@ function MainApp({ onLogout }) {
           <div className="l">Day streak</div>
         </div>
       </div>
+
+      {/* Mobile bottom bar — 4 primary tabs + More */}
+      <nav className="mobile-nav-bar">
+        {mobilePrimaryItems.map(([key, glyph, label]) => (
+          <button key={key} className={tab === key ? 'active' : ''} onClick={() => goTo(key)}>
+            <span className="tag">{glyph}</span>
+            <span className="mnb-label">{label}</span>
+          </button>
+        ))}
+        <button className={activeInMore ? 'active' : ''} onClick={() => setMoreOpen(true)}>
+          <span className="tag">⋯</span>
+          <span className="mnb-label">More</span>
+        </button>
+      </nav>
+
+      {/* Mobile "More" sheet */}
+      {moreOpen && (
+        <div className="sheet-backdrop" onClick={() => setMoreOpen(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <div className="sheet-grid">
+              {mobileMoreItems.map(([key, glyph, label]) => (
+                <button key={key} className={'sheet-item' + (tab === key ? ' active' : '')} onClick={() => goTo(key)}>
+                  <span className="tag">{glyph}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+            <button className="btn secondary btn-block" onClick={() => setMoreOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
       <main>
         {tab === 'today' && <TodayPanel onSaved={refreshSidebar} />}
         {tab === 'vocab' && <VocabPanel onChanged={refreshSidebar} />}
         {tab === 'practice' && <PracticePanel />}
         {tab === 'cards' && <FlashcardsPanel />}
         {tab === 'calendar' && <CalendarPanel onChanged={refreshSidebar} />}
-
         {tab === 'library' && <LibraryPanel />}
         {tab === 'roadmap' && <RoadmapPanel />}
         {tab === 'stats' && <StatsPanel onLogout={onLogout} onChanged={refreshSidebar} />}

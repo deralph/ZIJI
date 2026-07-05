@@ -106,7 +106,7 @@ export default function App() {
             </div>
           )}
 
-          <button className="btn btn-block" type="submit" disabled={submitting || pinField.length < 1}>
+          <button className="btn " type="submit" disabled={submitting || pinField.length < 1}>
             {submitting ? 'Please wait…' : (isSetup ? 'Create PIN & start' : 'Unlock')}
           </button>
         </form>

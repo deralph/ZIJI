@@ -15,7 +15,7 @@ const audioRoutes = require('./routes/audio');
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: process.env.FRONTEND_URL,
 }));
 app.use(express.json());
 
